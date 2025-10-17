@@ -28,6 +28,21 @@ export const TowerScene: React.FC<TowerSceneProps> = ({ selectedModel }) => {
   const towerBodiesRef = React.useRef<Body[]>([]);
   const boundaryBodiesRef = React.useRef<Body[]>([]);
   const [isShimmering, setIsShimmering] = React.useState(false);
+  const shimmeringRef = React.useRef(false);
+
+  const getFillStyleForLevel = React.useCallback((level: number) => {
+    return shimmeringRef.current
+      ? `hsla(${220 + level * 0.6}, 95%, 65%, 0.9)`
+      : `hsla(${215 + level * 0.35}, 75%, 62%, 0.95)`;
+  }, []);
+
+  const updateTowerAppearance = React.useCallback(() => {
+    towerBodiesRef.current.forEach((body) => {
+      const pluginData = (body.plugin as { towerLevel?: number } | undefined) ?? {};
+      const level = pluginData.towerLevel ?? 0;
+      body.render.fillStyle = getFillStyleForLevel(level);
+    });
+  }, [getFillStyleForLevel]);
 
   const buildTower = React.useCallback(() => {
     const engine = engineRef.current;
@@ -99,11 +114,13 @@ export const TowerScene: React.FC<TowerSceneProps> = ({ selectedModel }) => {
           frictionAir: 0.015,
           restitution: 0.05,
           render: {
-            fillStyle: isShimmering
-              ? `hsla(${220 + level * 0.6}, 95%, 65%, 0.9)`
-              : `hsla(${215 + level * 0.35}, 75%, 62%, 0.95)`,
+            fillStyle: getFillStyleForLevel(level),
           },
         });
+
+        const pluginData = (body.plugin ?? {}) as { towerLevel?: number };
+        pluginData.towerLevel = level;
+        body.plugin = pluginData;
 
         boxes.push(body);
       }
@@ -111,7 +128,8 @@ export const TowerScene: React.FC<TowerSceneProps> = ({ selectedModel }) => {
 
     boxes.forEach((body) => World.add(world, body));
     towerBodiesRef.current = boxes;
-  }, [isShimmering]);
+    updateTowerAppearance();
+  }, [getFillStyleForLevel, updateTowerAppearance]);
 
   const handleReset = React.useCallback(() => {
     const engine = engineRef.current;
@@ -238,12 +256,18 @@ export const TowerScene: React.FC<TowerSceneProps> = ({ selectedModel }) => {
 
   React.useEffect(() => {
     // change shimmering effect to celebrate model selection
-    const shimmerTimeout = window.setTimeout(() => setIsShimmering(false), 1200);
+    shimmeringRef.current = true;
     setIsShimmering(true);
-    buildTower();
+    updateTowerAppearance();
+
+    const shimmerTimeout = window.setTimeout(() => {
+      shimmeringRef.current = false;
+      setIsShimmering(false);
+      updateTowerAppearance();
+    }, 1200);
 
     return () => window.clearTimeout(shimmerTimeout);
-  }, [selectedModel, buildTower]);
+  }, [selectedModel, updateTowerAppearance]);
 
   React.useEffect(() => {
     const engine = engineRef.current;
@@ -285,7 +309,14 @@ export const TowerScene: React.FC<TowerSceneProps> = ({ selectedModel }) => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setIsShimmering((prev) => !prev)}
+                onClick={() =>
+                  setIsShimmering((prev) => {
+                    const next = !prev;
+                    shimmeringRef.current = next;
+                    updateTowerAppearance();
+                    return next;
+                  })
+                }
                 aria-label="Toggle shimmer"
               >
                 <Sparkles className="h-5 w-5" />
